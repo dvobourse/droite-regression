@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TotalEnergies – Régression & bandes σ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1a1d21;--mut:#6b7280;--bd:#e3e6ea;--acc:#2563eb;
+--s2m:#15803d;--s1m:#65a30d;--s1p:#ea580c;--s2p:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#181b21;--tx:#e8eaed;--mut:#9aa1ac;--bd:#2a2f37;--acc:#60a5fa;--s2m:#4ade80;--s1m:#a3e635;--s1p:#fb923c;--s2p:#f87171}}
+:root[data-theme="dark"]{--bg:#0f1115;--card:#181b21;--tx:#e8eaed;--mut:#9aa1ac;--bd:#2a2f37;--acc:#60a5fa;--s2m:#4ade80;--s1m:#a3e635;--s1p:#fb923c;--s2p:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.w{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 2px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+label{font-size:13px;color:var(--mut)}
+select,button,textarea{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 10px}
+button{cursor:pointer}button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+textarea{width:100%;height:70px;box-sizing:border-box;font-size:12px;font-family:ui-monospace,monospace}
+.verdict{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.badge{font-weight:700;font-size:18px;padding:8px 14px;border-radius:10px;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.k{border:1px solid var(--bd);border-radius:10px;padding:10px}
+.k b{display:block;font-size:18px}.k span{font-size:12px;color:var(--mut)}
+.cv{position:relative;height:420px}
+.gauge{position:relative;height:16px;border-radius:8px;margin:26px 6px 22px;background:linear-gradient(90deg,var(--s2m),var(--s1m) 30%,#9ca3af 50%,var(--s1p) 70%,var(--s2p))}
+.gauge i{position:absolute;top:-6px;width:4px;height:28px;background:var(--tx);border-radius:2px;transform:translateX(-2px)}
+.gauge u{position:absolute;top:20px;font-size:11px;color:var(--mut);text-decoration:none;transform:translateX(-50%)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}
+#msg{color:var(--s2p);font-size:13px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="w">
+<h1>TotalEnergies (TTE) – Régression & bandes ±σ</h1>
+<div class="sub">Chargement automatique de l'historique (ou import CSV manuel) → droite de régression, ±1σ / ±2σ, z-score actuel et zone.</div>
+
+<div class="card">
+<div class="row">
+<input type="file" id="f" accept=".csv,.txt,.tsv">
+<label>Période <select id="per"><option value="20" selected>20 ans</option><option value="15">15 ans</option><option value="10">10 ans</option><option value="5">5 ans</option></select></label>
+<label>Modèle <select id="mod"><option value="log" selected>Log-linéaire (recommandé)</option><option value="lin">Linéaire</option></select></label>
+<label>Colonne <select id="col"></select></label>
+<button id="th">Thème</button>
+</div>
+<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--mut);font-size:13px">Ou coller le CSV (Date, Close)</summary>
+<textarea id="ta" placeholder="Date,Close&#10;2006-10-01,..."></textarea><button class="p" id="go" style="margin-top:6px">Analyser</button></details>
+<div class="sub" style="margin:8px 0 0">Source : export Yahoo Finance (<code>TTE.PA</code>, Max, Monthly/Weekly/Daily) ou Stooq (<code>tte.fr</code>). Séparateur , ; ou tabulation, décimale . ou , acceptés.</div>
+<div id="msg"></div>
+</div>
+
+<div id="out" style="display:none">
+<div class="card"><div class="verdict"><div class="badge" id="bd"></div><div id="vt" style="flex:1;min-width:220px"></div></div>
+<div class="gauge" id="g"></div></div>
+<div class="card"><div class="cv"><canvas id="c"></canvas></div></div>
+<div class="grid" id="kp"></div>
+<div class="card" style="margin-top:12px"><b>Niveaux aujourd'hui</b><div class="wrap"><table id="tb"></table></div></div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let raw=null,chart=null;
+const num=s=>{s=String(s).trim().replace(/\s/g,'').replace(/[€$"]/g,'');if(s.includes(',')&&!s.includes('.'))s=s.replace(',','.');else s=s.replace(/,/g,'');return parseFloat(s)};
+const pd=s=>{s=s.trim().replace(/"/g,'');let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);m=s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);return null};
+function parse(t){
+ const L=t.split(/\r?\n/).filter(x=>x.trim());if(L.length<10)throw 'Fichier trop court.';
+ const d=[';','\t',','].find(c=>L[0].includes(c))||',';
+ const h=L[0].split(d).map(x=>x.trim().replace(/"/g,''));
+ const di=h.findIndex(x=>/date/i.test(x)),dI=di<0?0:di;
+ const cols=h.map((x,i)=>({x,i})).filter(o=>o.i!==dI&&!/volume|vol/i.test(o.x)&&!/open|high|low|ouv|haut|bas/i.test(o.x));
+ if(!cols.length)throw 'Colonne de prix introuvable.';
+ const sel=$('col');sel.innerHTML=cols.map(o=>`<option value="${o.i}">${o.x}</option>`).join('');
+ const pref=cols.find(o=>/adj/i.test(o.x))||cols.find(o=>/close|cl[oô]t|zamk/i.test(o.x))||cols[0];sel.value=pref.i;
+ raw={L,d,dI};
+}
+function series(){
+ const{L,d,dI}=raw,ci=+$('col').value,out=[];
+ for(let i=1;i<L.length;i++){const p=L[i].split(d),dt=pd(p[dI]||''),v=num(p[ci]);if(dt&&isFinite(v)&&v>0)out.push({t:dt,v})}
+ out.sort((a,b)=>a.t-b.t);return out;
+}
+function run(){
+ if(!raw)return;$('msg').textContent='';
+ let s=series();if(s.length<30){$('msg').textContent='Pas assez de points valides.';return}
+ const last=s[s.length-1].t,cut=new Date(last);cut.setFullYear(cut.getFullYear()-(+$('per').value));
+ s=s.filter(o=>o.t>=cut);
+ const log=$('mod').value==='log',n=s.length,t0=s[0].t.getTime();
+ const X=s.map(o=>(o.t.getTime()-t0)/31557600000),Y=s.map(o=>log?Math.log(o.v):o.v);
+ const mx=X.reduce((a,b)=>a+b)/n,my=Y.reduce((a,b)=>a+b)/n;
+ let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(X[i]-mx)*(Y[i]-my);sxx+=(X[i]-mx)**2;syy+=(Y[i]-my)**2}
+ const b=sxy/sxx,a=my-b*mx;let sse=0;for(let i=0;i<n;i++)sse+=(Y[i]-(a+b*X[i]))**2;
+ const sd=Math.sqrt(sse/(n-2)),r2=1-sse/syy;
+ const f=(x,k)=>{const y=a+b*x+k*sd;return log?Math.exp(y):y};
+ const ks=[-2,-1,0,1,2],lab=s.map(o=>o.t.toLocaleDateString('fr-FR',{month:'short',year:'numeric'}));
+ const xl=X[n-1],z=(Y[n-1]-(a+b*xl))/sd,px=s[n-1].v;
+ const cols={'-2':'--s2m','-1':'--s1m','0':'--tx','1':'--s1p','2':'--s2p'},cs=getComputedStyle(document.documentElement);
+ const col=k=>cs.getPropertyValue(cols[k]).trim();
+ const ds=[{label:'Cours',data:s.map(o=>o.v),borderColor:cs.getPropertyValue('--acc').trim(),borderWidth:1.6,pointRadius:0,order:0}];
+ ks.forEach(k=>ds.push({label:k===0?'Régression':(k>0?'+':'−')+Math.abs(k)+'σ',data:X.map(x=>f(x,k)),borderColor:col(k),borderWidth:k===0?2:1.4,borderDash:k===0?[]:(Math.abs(k)===2?[]:[6,4]),pointRadius:0,order:1}));
+ if(chart)chart.destroy();
+ chart=new Chart($('c'),{type:'line',data:{labels:lab,datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+  scales:{x:{ticks:{maxTicksLimit:10,color:cs.getPropertyValue('--mut').trim()},grid:{display:false}},y:{type:log?'logarithmic':'linear',ticks:{color:cs.getPropertyValue('--mut').trim(),callback:v=>v+' €'},grid:{color:cs.getPropertyValue('--bd').trim()}}},
+  plugins:{legend:{labels:{color:cs.getPropertyValue('--tx').trim(),usePointStyle:true}},tooltip:{callbacks:{label:c=>c.dataset.label+' : '+c.parsed.y.toFixed(2)+' €'}}}}});
+ let zone,c,txt;
+ if(z<=-2){zone='ACHAT FORT (≤ −2σ)';c='--s2m';txt='Le cours est sous la bande −2σ : décote statistique extrême vs tendance long terme.'}
+ else if(z<=-1){zone='ZONE D\'ACHAT (−2σ à −1σ)';c='--s1m';txt='Cours sous la tendance, entre −2σ et −1σ : décote significative.'}
+ else if(z<1){zone='NEUTRE (−1σ à +1σ)';c='--tx';txt='Cours dans le canal normal autour de la tendance : pas de signal statistique.'}
+ else if(z<2){zone='CHER (+1σ à +2σ)';c='--s1p';txt='Cours au-dessus de la tendance : prime significative, prudence sur les renforcements.'}
+ else{zone='SURÉVALUÉ (≥ +2σ)';c='--s2p';txt='Cours au-dessus de +2σ : excès statistique par rapport à la tendance.'}
+ const bd=$('bd');bd.textContent=zone;bd.style.background=cs.getPropertyValue(c).trim();
+ $('vt').innerHTML=`<b>z-score : ${z>=0?'+':''}${z.toFixed(2)}σ</b> · dernier cours ${px.toFixed(2)} € (${s[n-1].t.toLocaleDateString('fr-FR')})<br><span style="color:var(--mut)">${txt}</span>`;
+ const pos=Math.max(0,Math.min(100,(z+3)/6*100)),G=$('g');
+ G.innerHTML=`<i style="left:${pos}%"></i>`+[-2,-1,0,1,2].map(k=>`<u style="left:${(k+3)/6*100}%">${k>0?'+':k<0?'−':''}${Math.abs(k)}σ</u>`).join('');
+ const ann=(Math.exp(b)-1)*100,annL=b;
+ $('kp').innerHTML=[['Points',n],['Période',s[0].t.getFullYear()+' → '+s[n-1].t.getFullYear()],['R²',r2.toFixed(3)],[log?'Croissance/an (tendance)':'Pente €/an',log?(ann>=0?'+':'')+ann.toFixed(2)+' %':b.toFixed(2)+' €'],['σ ('+(log?'log':'€')+')',log?(sd*100).toFixed(1)+' %':sd.toFixed(2)+' €']]
+  .map(([k,v])=>`<div class="k"><span>${k}</span><b>${v}</b></div>`).join('');
+ $('tb').innerHTML='<tr><th>Niveau</th><th>Prix (€)</th><th>Écart vs cours</th></tr>'+[2,1,0,-1,-2].map(k=>{const p=f(xl,k);return`<tr><td style="color:${col(k)};font-weight:600">${k===0?'Régression':(k>0?'+':'−')+Math.abs(k)+'σ'}</td><td>${p.toFixed(2)}</td><td>${((p/px-1)*100).toFixed(1)} %</td></tr>`}).join('');
+ $('out').style.display='block';
+}
+fetch('data/tte.csv',{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>{parse(t);run();return fetch('data/meta.json',{cache:'no-store'}).then(r=>r.json()).then(m=>{const e=$('msg');e.style.color='var(--mut)';e.textContent='Données automatiques – mise à jour '+m.updated+' · '+m.rows+' lignes · '+m.source})}).catch(()=>{});
+$('f').onchange=e=>{const r=e.target.files[0];if(!r)return;r.text().then(t=>{try{parse(t);run()}catch(x){$('msg').textContent=x}})};
+$('go').onclick=()=>{try{parse($('ta').value);run()}catch(x){$('msg').textContent=x}};
+['per','mod','col'].forEach(i=>$(i).onchange=run);
+$('th').onclick=()=>{const r=document.documentElement,d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);r.dataset.theme=d?'light':'dark';run()};
+</script>
+</body>
+</html>
