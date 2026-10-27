@@ -33,7 +33,7 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}.pill{color:#fff;bor
 <h1>SBF 120 – Régression log-linéaire & bandes ±σ</h1>
 <div class="sub">Historique max disponible jusqu'à la période choisie : une valeur récente est analysée depuis sa première cotation.</div>
 <div class="card"><div class="row">
-<button class="tab on" id="t1">Screener</button><button class="tab" id="t2">Analyse détaillée</button>
+<button class="tab on" id="t1">Screener</button><button class="tab" id="t2">Analyse détaillée</button><button class="tab" id="t3">Backtest</button>
 <label>Période <select id="per"><option value="20" selected>20 ans</option><option value="15">15 ans</option><option value="10">10 ans</option><option value="5">5 ans</option></select></label>
 <label>Modèle <select id="mod"><option value="log" selected>Log-linéaire</option><option value="lin">Linéaire</option></select></label>
 <label>R² min <select id="r2"><option value="0">aucun</option><option value="0.3">0,3</option><option value="0.5" selected>0,5</option><option value="0.7">0,7</option></select></label>
@@ -47,6 +47,11 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}.pill{color:#fff;bor
 <div class="card"><div class="verdict"><span class="badge" id="bd"></span><div id="vt" style="flex:1;min-width:220px"></div></div><div class="gauge" id="g"></div></div>
 <div class="card"><div class="cv"><canvas id="c"></canvas></div></div><div class="grid" id="kp"></div>
 <div class="card"><b>Niveaux aujourd'hui</b><div class="wrap"><table id="tb"></table></div></div></div>
+<div id="v3" style="display:none"><div class="card"><div class="row"><button class="tab on" id="bt">Lancer le backtest</button>
+<label>Horizon <select id="bh"><option value="0">6 mois</option><option value="1" selected>12 mois</option><option value="2">24 mois</option></select></label><span class="sub" id="bs"></span></div>
+<div class="sub" style="margin-top:8px">Test sans regard sur le futur : à chaque date, le z-score est calculé uniquement avec les cours passés (fenêtre = « Période », au moins 5 ans d'historique), puis comparé au rendement réalisé ensuite (dividendes inclus). Les réglages Période et R² minimum ci-dessus s'appliquent ; le backtest est toujours log-linéaire.</div></div>
+<div id="bo" style="display:none"><div class="card" id="bsum"></div><div class="card"><div class="cv" style="height:300px"><canvas id="bc"></canvas></div></div>
+<div class="card"><div class="wrap"><table id="bt2"></table></div></div><div class="card sub" id="bn"></div></div></div>
 </div>
 <script>
 const $=id=>document.getElementById(id);let D,cur='TTE.PA',chart,rows=[],zf='all',sk='z',sd_=1;
@@ -83,8 +88,36 @@ function detail(){const s=D.stocks[cur],[y,l]=P(),f=fit(s,y,l);if(!f){$('vt').te
  $('g').innerHTML=`<i style="left:${Math.max(0,Math.min(100,(f.z+3)/6*100))}%"></i>`+[-2,-1,0,1,2].map(k=>`<u style="left:${(k+3)/6*100}%">${k>0?'+':k<0?'−':''}${Math.abs(k)}σ</u>`).join('');
  $('kp').innerHTML=[['Points',n],['Période',fmt(s.d[f.i0])+' → '+fmt(s.d[s.d.length-1])],['Historique',f.yrs.toFixed(1)+' ans'],['R²',f.r2.toFixed(3)],[l?'Croissance/an':'Pente €/an',l?((Math.exp(f.b)-1)*100).toFixed(2)+' %':f.b.toFixed(2)+' €'],['σ',l?(f.sd*100).toFixed(1)+' %':f.sd.toFixed(2)+' €']].map(([k,v])=>`<div class="k"><span>${k}</span><b>${v}</b></div>`).join('');
  const xl=f.X[n-1];$('tb').innerHTML='<tr><th>Niveau</th><th>Prix (€)</th><th>Écart vs cours</th></tr>'+[2,1,0,-1,-2].map(k=>{const p=f.f(xl,k);return`<tr><td style="color:${cv(ZN[zi(k)][2])};font-weight:600">${k==0?'Régression':(k>0?'+':'−')+Math.abs(k)+'σ'}</td><td>${p.toFixed(2)}</td><td>${((p/f.px-1)*100).toFixed(1)} %</td></tr>`}).join('')}
-function tab(n){$('v1').style.display=n==1?'':'none';$('v2').style.display=n==2?'':'none';$('t1').classList.toggle('on',n==1);$('t2').classList.toggle('on',n==2);if(n==2)detail()}
-const refresh=()=>{if(!D)return;build();if($('v2').style.display!='none')detail()};
+function tab(n){['v1','v2','v3'].forEach((v,k)=>$(v).style.display=n==k+1?'':'none');['t1','t2','t3'].forEach((t,k)=>$(t).classList.toggle('on',n==k+1));if(n==2)detail()}
+const refresh=()=>{if(!D)return;if(BT){BT=null;$('bo').style.display='none';$('bs').textContent='Réglages modifiés : relance le backtest.'}build();if($('v2').style.display!='none')detail()};
+
+const HZ=[26,52,104],STEP=4,MINP=260;let BT=null,bch=null;
+const med=a=>{const b=[...a].sort((x,y)=>x-y),m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2},pct=(a,q)=>{const b=[...a].sort((x,y)=>x-y);return b[Math.min(b.length-1,Math.floor(q*b.length))]},avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+async function backtest(){const[y]=P(),mr=+$('r2').value,N=Object.keys(D.stocks).length;$('bt').disabled=true;const obs=[];let k=0;
+ for(const s of Object.values(D.stocks)){const d=s.d,p=s.p,L=d.length,lp=p.map(Math.log);
+  for(let i=MINP-1;i<L;i+=STEP){const cut=d[i]-y*365.25;let i0=Math.max(0,i-Math.ceil(y*52.2)-8);while(d[i0]<cut)i0++;const n=i-i0+1;if(n<MINP)continue;
+   let sx=0,sy=0;for(let j=i0;j<=i;j++){sx+=(d[j]-d[i0])/365.25;sy+=lp[j]}const mx=sx/n,my=sy/n;let sxx=0,sxy=0,syy=0;
+   for(let j=i0;j<=i;j++){const x=(d[j]-d[i0])/365.25-mx,yy=lp[j]-my;sxx+=x*x;sxy+=x*yy;syy+=yy*yy}
+   const b=sxy/sxx,a=my-b*mx,sse=syy-b*sxy,sd=Math.sqrt(sse/(n-2)),r2=1-sse/syy;if(!(sd>0)||r2<mr)continue;
+   const z=(lp[i]-a-b*((d[i]-d[i0])/365.25))/sd;obs.push({d:d[i],z,f:HZ.map(h=>i+h<L?p[i+h]/p[i]-1:null)})}
+  if(++k%6==0){$('bs').textContent=`Calcul… ${k}/${N} valeurs`;await new Promise(r=>setTimeout(r))}}
+ const U={};obs.forEach(o=>o.f.forEach((r,h)=>{if(r==null)return;const e=U[o.d]||(U[o.d]=[[0,0],[0,0],[0,0]]);e[h][0]+=r;e[h][1]++}));
+ const B=[0,1,2,3,4].map(()=>HZ.map(()=>({r:[],x:[]})));
+ obs.forEach(o=>o.f.forEach((r,h)=>{if(r==null)return;const u=U[o.d][h];if(u[1]<8)return;const m=u[0]/u[1],c=B[zi(o.z)][h];c.r.push(r);c.x.push(r-m)}));
+ BT={B,y,mr,n:obs.length,from:Math.min(...obs.map(o=>o.d)),to:Math.max(...obs.map(o=>o.d))};$('bt').disabled=false;$('bs').textContent='';btRender()}
+function btRender(){if(!BT)return;const h=+$('bh').value,B=BT.B,lab=['6 mois','12 mois','24 mois'][h];
+ const pool=ks=>{const x=[];ks.forEach(k=>x.push(...B[k][h].x));return x},lo=pool([0,1]),hi=pool([3,4]);
+ const f=v=>(v>=0?'+':'')+(v*100).toFixed(1)+' pts';
+ let v='Échantillon insuffisant pour conclure.';if(lo.length>30&&hi.length>30){const sp=avg(lo)-avg(hi);
+  v=sp>0.03?`Le signal tient : à ${lab}, z ≤ −1 bat l'univers de ${f(avg(lo))} contre ${f(avg(hi))} pour z ≥ +1 (écart ${f(sp)}).`:sp>0?`Signal faible : à ${lab}, z ≤ −1 : ${f(avg(lo))} vs z ≥ +1 : ${f(avg(hi))} (écart ${f(sp)}). À confirmer avec un filtre qualité.`:`Pas de prime à acheter la décote seule : à ${lab}, z ≤ −1 : ${f(avg(lo))} vs z ≥ +1 : ${f(avg(hi))} (écart ${f(sp)}). Le z-score ne suffit pas, il faut le croiser avec la qualité.`}
+ $('bsum').innerHTML=`<b>${v}</b><div class="sub" style="margin-top:4px">${BT.n.toLocaleString('fr-FR')} observations · ${fmt(BT.from)} → ${fmt(BT.to)} · fenêtre ${BT.y} ans · R² ≥ ${BT.mr} · rendements dividendes inclus, excès = rendement − moyenne de l'univers à la même date</div>`;
+ const st=B.map(b=>{const c=b[h];return c.r.length?{n:c.r.length,m:avg(c.r),md:med(c.r),x:avg(c.x),w:c.x.filter(v=>v>0).length/c.x.length,p10:pct(c.r,.1),up:c.r.filter(v=>v>0).length/c.r.length}:null});
+ const pc=v=>(v*100).toFixed(1)+' %';
+ $('bt2').innerHTML='<tr><th>Zone (z au départ)</th><th>Obs.</th><th>Rend. moyen</th><th>Médiane</th><th>Excès moyen</th><th>Battent l\'univers</th><th>Rend. &gt; 0</th><th>Pire décile</th></tr>'+st.map((c,i)=>c?`<tr><td style="color:${cv(ZN[i][2])};font-weight:600">${ZN[i][1]}</td><td>${c.n}</td><td>${pc(c.m)}</td><td>${pc(c.md)}</td><td><b>${f(c.x)}</b></td><td>${pc(c.w)}</td><td>${pc(c.up)}</td><td>${pc(c.p10)}</td></tr>`:`<tr><td>${ZN[i][1]}</td><td colspan="7">—</td></tr>`).join('');
+ if(bch)bch.destroy();bch=new Chart($('bc'),{type:'bar',data:{labels:ZN.map(z=>z[1].split(' (')[0]),datasets:[{label:'Excès de rendement moyen à '+lab+' (pts)',data:st.map(c=>c?+(c.x*100).toFixed(2):0),backgroundColor:ZN.map(z=>cv(z[2]==='--tx'?'--mut':z[2]))}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{x:{ticks:{color:cv('--mut')},grid:{display:false}},y:{ticks:{color:cv('--mut'),callback:v=>v+' pts'},grid:{color:cv('--bd')}}},plugins:{legend:{labels:{color:cv('--tx')}}}}});
+ $('bn').innerHTML='<b>Limites :</b> (1) biais du survivant : seules les valeurs actuellement dans la liste sont testées, les sociétés disparues ou sorties de l\'indice manquent, ce qui flatte les résultats ; (2) observations très chevauchantes (une par valeur toutes les 4 semaines, avec 6 à 24 mois de recul) et corrélées entre valeurs : les effectifs affichés surestiment la fiabilité statistique ; (3) une seule période de marché (2006 → aujourd\'hui) ; (4) hors frais et fiscalité.';
+ $('bo').style.display=''}
+$('t3').onclick=()=>tab(3);$('bt').onclick=backtest;$('bh').onchange=btRender;
 $('t1').onclick=()=>tab(1);$('t2').onclick=()=>tab(2);['per','mod','r2'].forEach(i=>$(i).onchange=refresh);$('q').oninput=list;$('sel').onchange=e=>{cur=e.target.value;detail()};
 $('th').onclick=()=>{const r=document.documentElement,d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);r.dataset.theme=d?'light':'dark';refresh()};
 fetch('data/sbf120.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{D=j;if(!D.stocks[cur])cur=Object.keys(D.stocks)[0];
