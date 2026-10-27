@@ -40,21 +40,24 @@ tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}.pill{color:#fff;bor
 <button id="th">Thème</button></div><div id="msg">Chargement…</div></div>
 
 <div id="v1"><div class="grid" id="zk"></div>
-<div class="card"><div class="row" style="margin-bottom:8px"><input type="text" id="q" placeholder="Rechercher une valeur…"><span class="sub" id="cnt"></span></div>
+<div class="card"><div class="row" style="margin-bottom:8px"><input type="text" id="q" placeholder="Rechercher une valeur…"><label>Qualité ≥ <select id="qm"><option value="0">aucune</option><option value="4">4/7</option><option value="5">5/7</option><option value="6">6/7</option></select></label><label>z ≤ <select id="zm"><option value="">aucun</option><option value="0">0</option><option value="-1">−1</option><option value="-2">−2</option></select></label><label>EV/EBITDA ≤ <select id="em"><option value="0">aucun</option><option value="12">12</option><option value="18">18</option></select></label><button class="tab on" id="qarp">Qualité à prix raisonnable</button><button id="qrst">Réinit.</button><span class="sub" id="cnt"></span></div>
 <div class="wrap" style="max-height:560px;overflow-y:auto"><table><thead><tr id="hd"></tr></thead><tbody id="tb1"></tbody></table></div></div></div>
 
 <div id="v2" style="display:none"><div class="card"><div class="row"><label>Valeur <select id="sel"></select></label></div></div>
 <div class="card"><div class="verdict"><span class="badge" id="bd"></span><div id="vt" style="flex:1;min-width:220px"></div></div><div class="gauge" id="g"></div></div>
 <div class="card"><div class="cv"><canvas id="c"></canvas></div></div><div class="grid" id="kp"></div>
+<div class="card" id="qc"></div>
 <div class="card"><b>Niveaux aujourd'hui</b><div class="wrap"><table id="tb"></table></div></div></div>
 <div id="v3" style="display:none"><div class="card"><div class="row"><button class="tab on" id="bt">Lancer le backtest</button>
 <label>Horizon <select id="bh"><option value="0">6 mois</option><option value="1" selected>12 mois</option><option value="2">24 mois</option></select></label><span class="sub" id="bs"></span></div>
 <div class="sub" style="margin-top:8px">Test sans regard sur le futur : à chaque date, le z-score est calculé uniquement avec les cours passés (fenêtre = « Période », au moins 5 ans d'historique), puis comparé au rendement réalisé ensuite (dividendes inclus). Les réglages Période et R² minimum ci-dessus s'appliquent ; le backtest est toujours log-linéaire.</div></div>
 <div id="bo" style="display:none"><div class="card" id="bsum"></div><div class="card"><div class="cv" style="height:300px"><canvas id="bc"></canvas></div></div>
-<div class="card"><div class="wrap"><table id="bt2"></table></div></div><div class="card sub" id="bn"></div></div></div>
+<div class="card"><div class="wrap"><table id="bt2"></table></div></div>
+<div class="card"><b>Décote avec ou sans retournement</b><div class="sub">Retournement confirmé = z remonté d'au moins 0,5σ sur les 8 dernières semaines.</div><div class="wrap"><table id="bt3"></table></div></div><div class="card sub" id="bn"></div></div></div>
 </div>
 <script>
-const $=id=>document.getElementById(id);let D,cur='TTE.PA',chart,rows=[],zf='all',sk='z',sd_=1;
+const $=id=>document.getElementById(id);let Q={q:{}},D,cur='TTE.PA',chart,rows=[],zf='all',sk='z',sd_=1;
+const qq=t=>(Q.q&&Q.q[t])||{};
 const ZN=[['sm2','Achat fort (≤ −2σ)','--s2m'],['sm1','Zone d\'achat (−2σ à −1σ)','--s1m'],['n','Neutre (±1σ)','--tx'],['sp1','Cher (+1σ à +2σ)','--s1p'],['sp2','Surévalué (≥ +2σ)','--s2p']];
 const zi=z=>z<=-2?0:z<=-1?1:z<1?2:z<2?3:4,cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const dt=d=>new Date(d*864e5),fmt=d=>dt(d).toLocaleDateString('fr-FR',{month:'short',year:'numeric'});
@@ -65,16 +68,17 @@ function fit(st,yrs,log){const d=st.d,L=d.length-1,cut=d[L]-yrs*365.25;let i0=0;
  const b=sxy/sxx,a=my-b*mx;let sse=0;for(let i=0;i<n;i++)sse+=(Y[i]-a-b*X[i])**2;const sd=Math.sqrt(sse/(n-2));
  return{i0,n,X,a,b,sd,r2:1-sse/syy,z:(Y[n-1]-a-b*X[n-1])/sd,px:st.p[L],yrs:(d[L]-d[i0])/365.25,short:d[0]>cut+45,log,f:(x,k)=>{const y=a+b*x+k*sd;return log?Math.exp(y):y}}}
 const P=()=>[+$('per').value,$('mod').value==='log'];
-function build(){const[y,l]=P(),mr=+$('r2').value;rows=[];for(const[t,s]of Object.entries(D.stocks)){const f=fit(s,y,l);if(f)rows.push({t,name:s.n,px:f.px,z:f.z,r2:f.r2,yrs:f.yrs,short:f.short,tr:l?(Math.exp(f.b)-1)*100:f.b/f.px*100})}
+function build(){const[y,l]=P(),mr=+$('r2').value;rows=[];for(const[t,s]of Object.entries(D.stocks)){const f=fit(s,y,l);if(f)rows.push({t,name:s.n,px:f.px,z:f.z,r2:f.r2,yrs:f.yrs,short:f.short,q:qq(t).s??null,qo:qq(t).of,ev:qq(t).ev??null,tr:l?(Math.exp(f.b)-1)*100:f.b/f.px*100})}
  $('zk').innerHTML=ZN.map((z,i)=>`<div class="k kz ${zf==i?'on':''}" style="--c:var(${z[2]})" data-z="${i}"><span>${z[1]}</span><b>${rows.filter(r=>zi(r.z)==i&&r.r2>=mr).length}</b></div>`).join('')+`<div class="k kz ${zf=='all'?'on':''}" style="--c:var(--acc)" data-z="all"><span>Toutes (R² ≥ ${mr})</span><b>${rows.filter(r=>r.r2>=mr).length}</b></div>`;
  document.querySelectorAll('.kz').forEach(e=>e.onclick=()=>{zf=e.dataset.z;build()});list()}
-const COLS=[['name','Valeur'],['px','Cours €'],['z','z-score'],['zone','Zone'],['yrs','Historique'],['r2','R²'],['tr','Tendance /an']];
+const COLS=[['name','Valeur'],['px','Cours €'],['z','z-score'],['zone','Zone'],['q','Qualité'],['ev','EV/EBITDA'],['yrs','Historique'],['r2','R²'],['tr','Tendance /an']];
 function list(){const mr=+$('r2').value,q=$('q').value.toLowerCase();
- let r=rows.filter(x=>x.r2>=mr&&(zf=='all'||zi(x.z)==zf)&&(x.name+x.t).toLowerCase().includes(q));
- const key=sk=='zone'?'z':sk;r.sort((a,b)=>(typeof a[key]=='string'?a[key].localeCompare(b[key]):a[key]-b[key])*sd_);
+ const qm=+$('qm').value,zm=$('zm').value===''?null:+$('zm').value,em=+$('em').value;
+ let r=rows.filter(x=>x.r2>=mr&&(zf=='all'||zi(x.z)==zf)&&(qm==0||(x.q!=null&&x.q>=qm))&&(zm==null||x.z<=zm)&&(em==0||(x.ev!=null&&x.ev>0&&x.ev<=em))&&(x.name+x.t).toLowerCase().includes(q));
+ const key=sk=='zone'?'z':sk;r.sort((a,b)=>{let u=a[key],v=b[key];if(u==null)u=-1e9;if(v==null)v=-1e9;return(typeof u=='string'?u.localeCompare(v):u-v)*sd_});
  $('hd').innerHTML=COLS.map(c=>`<th data-k="${c[0]}">${c[1]}${sk==c[0]?(sd_>0?' ▲':' ▼'):''}</th>`).join('');
  document.querySelectorAll('#hd th').forEach(h=>h.onclick=()=>{sd_=sk==h.dataset.k?-sd_:1;sk=h.dataset.k;list()});
- $('tb1').innerHTML=r.map(x=>{const z=ZN[zi(x.z)];return`<tr data-t="${x.t}" class="${x.r2<.5?'dim':''}"><td>${x.name} <span class="sub">${x.t.replace('.PA','')}</span></td><td>${x.px.toFixed(2)}</td><td><b>${x.z>=0?'+':''}${x.z.toFixed(2)}</b></td><td><span class="pill" style="background:var(${z[2]==='--tx'?'--mut':z[2]})">${z[1].split(' (')[0]}</span></td><td>${x.yrs.toFixed(1)} ans${x.short?' ⚠':''}</td><td>${x.r2.toFixed(2)}</td><td>${x.tr>=0?'+':''}${x.tr.toFixed(1)} %</td></tr>`}).join('');
+ $('tb1').innerHTML=r.map(x=>{const z=ZN[zi(x.z)];return`<tr data-t="${x.t}" class="${x.r2<.5?'dim':''}"><td>${x.name} <span class="sub">${x.t.replace('.PA','')}</span></td><td>${x.px.toFixed(2)}</td><td><b>${x.z>=0?'+':''}${x.z.toFixed(2)}</b></td><td><span class="pill" style="background:var(${z[2]==='--tx'?'--mut':z[2]})">${z[1].split(' (')[0]}</span></td><td>${x.q==null?'–':'<b style="color:'+(x.q/x.qo>=.7?'var(--s2m)':x.q/x.qo>=.5?'var(--s1m)':'var(--s2p)')+'">'+x.q+'/'+x.qo+'</b>'}</td><td>${x.ev!=null&&x.ev>0?x.ev.toFixed(1)+'x':'–'}</td><td>${x.yrs.toFixed(1)} ans${x.short?' ⚠':''}</td><td>${x.r2.toFixed(2)}</td><td>${x.tr>=0?'+':''}${x.tr.toFixed(1)} %</td></tr>`}).join('');
  document.querySelectorAll('#tb1 tr').forEach(e=>e.onclick=()=>{cur=e.dataset.t;tab(2)});$('cnt').textContent=r.length+' valeurs · ⚠ = historique < période choisie · lignes grisées = R² < 0,5'}
 function detail(){const s=D.stocks[cur],[y,l]=P(),f=fit(s,y,l);if(!f){$('vt').textContent='Historique insuffisant (< 52 semaines).';return}
  $('sel').value=cur;const n=f.n,lab=[],px=[];for(let i=f.i0;i<s.d.length;i++){lab.push(fmt(s.d[i]));px.push(s.p[i])}
@@ -87,39 +91,49 @@ function detail(){const s=D.stocks[cur],[y,l]=P(),f=fit(s,y,l);if(!f){$('vt').te
  $('vt').innerHTML=`<b>${s.n} · z-score ${f.z>=0?'+':''}${f.z.toFixed(2)}σ</b> · cours ${f.px.toFixed(2)} € (${dt(s.d[s.d.length-1]).toLocaleDateString('fr-FR')})<br><span class="${f.r2<.5?'warn':'sub'}">R² = ${f.r2.toFixed(2)}${f.r2<.5?' : tendance peu explicative, signal à prendre avec prudence':''}${f.short?' · historique de '+f.yrs.toFixed(1)+' ans seulement (depuis '+fmt(s.d[0])+')':''}</span>`;
  $('g').innerHTML=`<i style="left:${Math.max(0,Math.min(100,(f.z+3)/6*100))}%"></i>`+[-2,-1,0,1,2].map(k=>`<u style="left:${(k+3)/6*100}%">${k>0?'+':k<0?'−':''}${Math.abs(k)}σ</u>`).join('');
  $('kp').innerHTML=[['Points',n],['Période',fmt(s.d[f.i0])+' → '+fmt(s.d[s.d.length-1])],['Historique',f.yrs.toFixed(1)+' ans'],['R²',f.r2.toFixed(3)],[l?'Croissance/an':'Pente €/an',l?((Math.exp(f.b)-1)*100).toFixed(2)+' %':f.b.toFixed(2)+' €'],['σ',l?(f.sd*100).toFixed(1)+' %':f.sd.toFixed(2)+' €']].map(([k,v])=>`<div class="k"><span>${k}</span><b>${v}</b></div>`).join('');
+ const qd=qq(cur),QL=Q.labels||[],U=['%','%',' pts','%','x','%','%'],mv=(v,i)=>v==null?'–':(i==2?(v*100).toFixed(1):i==4?v.toFixed(2):(v*100).toFixed(1))+U[i];
+ $('qc').innerHTML=qd.c?`<b>Qualité : ${qd.s==null?'données insuffisantes ('+qd.of+' critères évaluables)':qd.s+'/'+qd.of}</b>${qd.fin?' <span class="sub">(financière : marges, ROCE, dette et FCF non évalués)</span>':''}<div class="sub">${qd.sec||''}${qd.ev!=null?' · EV/EBITDA '+qd.ev.toFixed(1)+'x':''}${qd.pe!=null?' · PER '+qd.pe.toFixed(1):''}${qd.mc?' · capi '+(qd.mc/1e9).toFixed(1)+' Md€':''}</div><div class="wrap"><table>`+qd.c.map((c,i)=>`<tr><td>${QL[i]||'Critère '+(i+1)}</td><td>${mv(qd.m[i],i)}</td><td style="color:var(${c==null?'--mut':c?'--s2m':'--s2p'})"><b>${c==null?'–':c?'✓':'✗'}</b></td></tr>`).join('')+'</table></div>':'<span class="sub">Pas de données de qualité pour cette valeur (workflow « Mise à jour qualité » à lancer).</span>';
  const xl=f.X[n-1];$('tb').innerHTML='<tr><th>Niveau</th><th>Prix (€)</th><th>Écart vs cours</th></tr>'+[2,1,0,-1,-2].map(k=>{const p=f.f(xl,k);return`<tr><td style="color:${cv(ZN[zi(k)][2])};font-weight:600">${k==0?'Régression':(k>0?'+':'−')+Math.abs(k)+'σ'}</td><td>${p.toFixed(2)}</td><td>${((p/f.px-1)*100).toFixed(1)} %</td></tr>`}).join('')}
 function tab(n){['v1','v2','v3'].forEach((v,k)=>$(v).style.display=n==k+1?'':'none');['t1','t2','t3'].forEach((t,k)=>$(t).classList.toggle('on',n==k+1));if(n==2)detail()}
 const refresh=()=>{if(!D)return;if(BT){BT=null;$('bo').style.display='none';$('bs').textContent='Réglages modifiés : relance le backtest.'}build();if($('v2').style.display!='none')detail()};
 
-const HZ=[26,52,104],STEP=4,MINP=260;let BT=null,bch=null;
+const HZ=[26,52,104],STEP=4,MINP=260,LB=8,DZ=0.5;let BT=null,bch=null;
 const med=a=>{const b=[...a].sort((x,y)=>x-y),m=b.length>>1;return b.length%2?b[m]:(b[m-1]+b[m])/2},pct=(a,q)=>{const b=[...a].sort((x,y)=>x-y);return b[Math.min(b.length-1,Math.floor(q*b.length))]},avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+function reg(d,lp,i,y){const cut=d[i]-y*365.25;let i0=Math.max(0,i-Math.ceil(y*52.2)-8);while(d[i0]<cut)i0++;const n=i-i0+1;if(n<MINP)return null;
+ let sx=0,sy=0;for(let j=i0;j<=i;j++){sx+=(d[j]-d[i0])/365.25;sy+=lp[j]}const mx=sx/n,my=sy/n;let sxx=0,sxy=0,syy=0;
+ for(let j=i0;j<=i;j++){const x=(d[j]-d[i0])/365.25-mx,yy=lp[j]-my;sxx+=x*x;sxy+=x*yy;syy+=yy*yy}
+ const b=sxy/sxx,a=my-b*mx,sse=syy-b*sxy,sd=Math.sqrt(sse/(n-2));if(!(sd>0))return null;return{z:(lp[i]-a-b*((d[i]-d[i0])/365.25))/sd,r2:1-sse/syy}}
 async function backtest(){const[y]=P(),mr=+$('r2').value,N=Object.keys(D.stocks).length;$('bt').disabled=true;const obs=[];let k=0;
  for(const s of Object.values(D.stocks)){const d=s.d,p=s.p,L=d.length,lp=p.map(Math.log);
-  for(let i=MINP-1;i<L;i+=STEP){const cut=d[i]-y*365.25;let i0=Math.max(0,i-Math.ceil(y*52.2)-8);while(d[i0]<cut)i0++;const n=i-i0+1;if(n<MINP)continue;
-   let sx=0,sy=0;for(let j=i0;j<=i;j++){sx+=(d[j]-d[i0])/365.25;sy+=lp[j]}const mx=sx/n,my=sy/n;let sxx=0,sxy=0,syy=0;
-   for(let j=i0;j<=i;j++){const x=(d[j]-d[i0])/365.25-mx,yy=lp[j]-my;sxx+=x*x;sxy+=x*yy;syy+=yy*yy}
-   const b=sxy/sxx,a=my-b*mx,sse=syy-b*sxy,sd=Math.sqrt(sse/(n-2)),r2=1-sse/syy;if(!(sd>0)||r2<mr)continue;
-   const z=(lp[i]-a-b*((d[i]-d[i0])/365.25))/sd;obs.push({d:d[i],z,f:HZ.map(h=>i+h<L?p[i+h]/p[i]-1:null)})}
+  for(let i=MINP+LB-1;i<L;i+=STEP){const a=reg(d,lp,i,y);if(!a||a.r2<mr)continue;const b=reg(d,lp,i-LB,y);if(!b)continue;
+   obs.push({d:d[i],z:a.z,dz:a.z-b.z,f:HZ.map(h=>i+h<L?p[i+h]/p[i]-1:null)})}
   if(++k%6==0){$('bs').textContent=`Calcul… ${k}/${N} valeurs`;await new Promise(r=>setTimeout(r))}}
  const U={};obs.forEach(o=>o.f.forEach((r,h)=>{if(r==null)return;const e=U[o.d]||(U[o.d]=[[0,0],[0,0],[0,0]]);e[h][0]+=r;e[h][1]++}));
- const B=[0,1,2,3,4].map(()=>HZ.map(()=>({r:[],x:[]})));
- obs.forEach(o=>o.f.forEach((r,h)=>{if(r==null)return;const u=U[o.d][h];if(u[1]<8)return;const m=u[0]/u[1],c=B[zi(o.z)][h];c.r.push(r);c.x.push(r-m)}));
- BT={B,y,mr,n:obs.length,from:Math.min(...obs.map(o=>o.d)),to:Math.max(...obs.map(o=>o.d))};$('bt').disabled=false;$('bs').textContent='';btRender()}
-function btRender(){if(!BT)return;const h=+$('bh').value,B=BT.B,lab=['6 mois','12 mois','24 mois'][h];
- const pool=ks=>{const x=[];ks.forEach(k=>x.push(...B[k][h].x));return x},lo=pool([0,1]),hi=pool([3,4]);
+ const mk=n=>Array.from({length:n},()=>HZ.map(()=>({r:[],x:[]})));const B=mk(5),S=mk(4);
+ obs.forEach(o=>o.f.forEach((r,h)=>{if(r==null)return;const u=U[o.d][h];if(u[1]<8)return;const m=u[0]/u[1],zz=zi(o.z);B[zz][h].r.push(r);B[zz][h].x.push(r-m);
+  if(zz<=1){const c=S[zz*2+(o.dz>=DZ?0:1)][h];c.r.push(r);c.x.push(r-m)}}));
+ BT={B,S,y,mr,n:obs.length,from:Math.min(...obs.map(o=>o.d)),to:Math.max(...obs.map(o=>o.d))};$('bt').disabled=false;$('bs').textContent='';btRender()}
+function btRender(){if(!BT)return;const h=+$('bh').value,B=BT.B,S=BT.S,lab=['6 mois','12 mois','24 mois'][h];
+ const pool=(A,ks)=>{const x=[];ks.forEach(k=>x.push(...A[k][h].x));return x},lo=pool(B,[0,1]),hi=pool(B,[3,4]),up=pool(S,[0,2]),no=pool(S,[1,3]);
  const f=v=>(v>=0?'+':'')+(v*100).toFixed(1)+' pts';
  let v='Échantillon insuffisant pour conclure.';if(lo.length>30&&hi.length>30){const sp=avg(lo)-avg(hi);
   v=sp>0.03?`Le signal tient : à ${lab}, z ≤ −1 bat l'univers de ${f(avg(lo))} contre ${f(avg(hi))} pour z ≥ +1 (écart ${f(sp)}).`:sp>0?`Signal faible : à ${lab}, z ≤ −1 : ${f(avg(lo))} vs z ≥ +1 : ${f(avg(hi))} (écart ${f(sp)}). À confirmer avec un filtre qualité.`:`Pas de prime à acheter la décote seule : à ${lab}, z ≤ −1 : ${f(avg(lo))} vs z ≥ +1 : ${f(avg(hi))} (écart ${f(sp)}). Le z-score ne suffit pas, il faut le croiser avec la qualité.`}
- $('bsum').innerHTML=`<b>${v}</b><div class="sub" style="margin-top:4px">${BT.n.toLocaleString('fr-FR')} observations · ${fmt(BT.from)} → ${fmt(BT.to)} · fenêtre ${BT.y} ans · R² ≥ ${BT.mr} · rendements dividendes inclus, excès = rendement − moyenne de l'univers à la même date</div>`;
- const st=B.map(b=>{const c=b[h];return c.r.length?{n:c.r.length,m:avg(c.r),md:med(c.r),x:avg(c.x),w:c.x.filter(v=>v>0).length/c.x.length,p10:pct(c.r,.1),up:c.r.filter(v=>v>0).length/c.r.length}:null});
- const pc=v=>(v*100).toFixed(1)+' %';
- $('bt2').innerHTML='<tr><th>Zone (z au départ)</th><th>Obs.</th><th>Rend. moyen</th><th>Médiane</th><th>Excès moyen</th><th>Battent l\'univers</th><th>Rend. &gt; 0</th><th>Pire décile</th></tr>'+st.map((c,i)=>c?`<tr><td style="color:${cv(ZN[i][2])};font-weight:600">${ZN[i][1]}</td><td>${c.n}</td><td>${pc(c.m)}</td><td>${pc(c.md)}</td><td><b>${f(c.x)}</b></td><td>${pc(c.w)}</td><td>${pc(c.up)}</td><td>${pc(c.p10)}</td></tr>`:`<tr><td>${ZN[i][1]}</td><td colspan="7">—</td></tr>`).join('');
+ let r2='';if(up.length>30&&no.length>30)r2=`<div style="margin-top:6px"><b>Retournement :</b> parmi les valeurs à z ≤ −1, celles dont le z remonte de ≥ ${DZ}σ en ${LB} semaines font ${f(avg(up))} (n = ${up.length}) contre ${f(avg(no))} (n = ${no.length}) pour les autres. ${avg(up)-avg(no)>0.02?'Attendre le retournement améliore le résultat.':avg(up)-avg(no)<-0.02?'Attendre le retournement n\'aide pas, il fait même moins bien.':'Différence négligeable.'}</div>`;
+ $('bsum').innerHTML=`<b>${v}</b>${r2}<div class="sub" style="margin-top:4px">${BT.n.toLocaleString('fr-FR')} observations · ${fmt(BT.from)} → ${fmt(BT.to)} · fenêtre ${BT.y} ans · R² ≥ ${BT.mr} · rendements dividendes inclus, excès = rendement − moyenne de l'univers à la même date</div>`;
+ const pc=v=>(v*100).toFixed(1)+' %',stat=A=>A.map(b=>{const c=b[h];return c.r.length?{n:c.r.length,m:avg(c.r),md:med(c.r),x:avg(c.x),w:c.x.filter(v=>v>0).length/c.x.length,p10:pct(c.r,.1),up:c.r.filter(v=>v>0).length/c.r.length}:null});
+ const head='<tr><th>Groupe (z au départ)</th><th>Obs.</th><th>Rend. moyen</th><th>Médiane</th><th>Excès moyen</th><th>Battent l\'univers</th><th>Rend. &gt; 0</th><th>Pire décile</th></tr>';
+ const rowH=(c,name,col)=>c?`<tr><td style="color:${col};font-weight:600">${name}</td><td>${c.n}</td><td>${pc(c.m)}</td><td>${pc(c.md)}</td><td><b>${f(c.x)}</b></td><td>${pc(c.w)}</td><td>${pc(c.up)}</td><td>${pc(c.p10)}</td></tr>`:`<tr><td>${name}</td><td colspan="7">—</td></tr>`;
+ const st=stat(B),ss=stat(S),SN=['Achat fort · retournement','Achat fort · sans retournement','Zone d\'achat · retournement','Zone d\'achat · sans retournement'];
+ $('bt2').innerHTML=head+st.map((c,i)=>rowH(c,ZN[i][1],cv(ZN[i][2]))).join('');
+ $('bt3').innerHTML=head+ss.map((c,i)=>rowH(c,SN[i],cv(ZN[i>>1][2]))).join('');
  if(bch)bch.destroy();bch=new Chart($('bc'),{type:'bar',data:{labels:ZN.map(z=>z[1].split(' (')[0]),datasets:[{label:'Excès de rendement moyen à '+lab+' (pts)',data:st.map(c=>c?+(c.x*100).toFixed(2):0),backgroundColor:ZN.map(z=>cv(z[2]==='--tx'?'--mut':z[2]))}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{x:{ticks:{color:cv('--mut')},grid:{display:false}},y:{ticks:{color:cv('--mut'),callback:v=>v+' pts'},grid:{color:cv('--bd')}}},plugins:{legend:{labels:{color:cv('--tx')}}}}});
- $('bn').innerHTML='<b>Limites :</b> (1) biais du survivant : seules les valeurs actuellement dans la liste sont testées, les sociétés disparues ou sorties de l\'indice manquent, ce qui flatte les résultats ; (2) observations très chevauchantes (une par valeur toutes les 4 semaines, avec 6 à 24 mois de recul) et corrélées entre valeurs : les effectifs affichés surestiment la fiabilité statistique ; (3) une seule période de marché (2006 → aujourd\'hui) ; (4) hors frais et fiscalité.';
+ $('bn').innerHTML='<b>Limites :</b> (1) biais du survivant : seules les valeurs actuellement dans la liste sont testées, les sociétés disparues ou sorties de l\'indice manquent, ce qui flatte les résultats ; (2) observations très chevauchantes (une par valeur toutes les 4 semaines, avec 6 à 24 mois de recul) et corrélées entre valeurs : les effectifs affichés surestiment la fiabilité statistique ; (3) une seule période de marché (2006 → aujourd\'hui) ; (4) hors frais et fiscalité ; (5) le score qualité n\'est pas backtesté : on ne dispose pas des fondamentaux historiques.';
  $('bo').style.display=''}
 $('t3').onclick=()=>tab(3);$('bt').onclick=backtest;$('bh').onchange=btRender;
+['qm','zm','em'].forEach(i=>$(i).onchange=list);$('qarp').onclick=()=>{$('qm').value='5';$('zm').value='-1';$('em').value='18';zf='all';build()};$('qrst').onclick=()=>{$('qm').value='0';$('zm').value='';$('em').value='0';zf='all';build()};
 $('t1').onclick=()=>tab(1);$('t2').onclick=()=>tab(2);['per','mod','r2'].forEach(i=>$(i).onchange=refresh);$('q').oninput=list;$('sel').onchange=e=>{cur=e.target.value;detail()};
 $('th').onclick=()=>{const r=document.documentElement,d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);r.dataset.theme=d?'light':'dark';refresh()};
+fetch('data/quality.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.q){Q=j;if(D)build()}}).catch(()=>{});
 fetch('data/sbf120.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{D=j;if(!D.stocks[cur])cur=Object.keys(D.stocks)[0];
  $('sel').innerHTML=Object.entries(D.stocks).sort((a,b)=>a[1].n.localeCompare(b[1].n)).map(([t,s])=>`<option value="${t}">${s.n} (${t.replace('.PA','')})</option>`).join('');
  $('msg').textContent=`Mise à jour ${D.updated} · ${Object.keys(D.stocks).length} valeurs · ${D.source}`+(D.failed.length?` · sans données : ${D.failed.join(', ')}`:'');build()}).catch(()=>$('msg').textContent='data/sbf120.json introuvable : lance le workflow « Mise à jour » dans l\'onglet Actions.');
