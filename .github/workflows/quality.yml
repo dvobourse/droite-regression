@@ -1,0 +1,23 @@
+name: Mise à jour qualité
+on:
+  schedule:
+    - cron: "0 12 * * 0"   # dimanche midi UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install yfinance pandas requests
+      - run: python scripts/quality.py
+      - name: Commit si changement
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data
+          git diff --cached --quiet || (git commit -m "data: qualité $(date -u +%F)" && git pull --rebase && git push)
