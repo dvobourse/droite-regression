@@ -1,4 +1,4 @@
-# TotalEnergies – régression & bandes ±σ (auto)
+# Droite de régression & bandes ±σ (auto)
 
 1. Crée un repo GitHub, pousse ces fichiers.
 2. Settings → Pages → Deploy from branch → `main` / `(root)`.
