@@ -95,7 +95,6 @@ VRLA.PA,Verallia
 POM.PA,OPmobility
 BB.PA,BIC
 TKO.PA,Tikehau Capital
-ANTIN.PA,Antin Infrastructure
 MRN.PA,Mersen
 AF.PA,Air France-KLM
 ADP.PA,Aéroports de Paris
@@ -114,7 +113,56 @@ ADYEN.AS,Adyen
 CDI.PA,Christian Dior
 VIRP.PA,Virbac
 IDL.PA,ID Logistics
-SHELL.SO,Shelly Group AD
-FDJ.PA,FDJ
+SLYG.SO,Shelly Group AD
+FDJU.PA,FDJ
 UBER,Uber Tech
-AOFG.DE,ATOSS Software AG
+AOF.DE,ATOSS Software AG
+NVDA,NVIDIA Corporation
+AAPL,Apple Inc.
+MSFT,Microsoft Corporation
+AMZN,Amazon.com Inc.
+GOOGL,Alphabet Inc. (Class A)
+GOOG,Alphabet Inc. (Class C)
+META,Meta Platforms Inc.
+TSLA,Tesla Inc.
+AVGO,Broadcom Inc.
+COST,Costco Wholesale Corporation
+ASML,ASML Holding N.V. (ADR)
+NFLX,Netflix Inc.
+AMD,Advanced Micro Devices Inc.
+TMUS,T-Mobile US Inc.
+CSCO,Cisco Systems Inc.
+INTC,Intel Corporation
+PEP,PepsiCo Inc.
+QCOM,QUALCOMM Inc.
+TXN,Texas Instruments Inc.
+AMGN,Amgen Inc.
+PANW,Palo Alto Networks Inc.
+ISRG,Intuitive Surgical Inc.
+INTU,Intuit Inc.
+CMCSA,Comcast Corporation
+HON,Honeywell International Inc.
+BKNG,Booking Holdings Inc.
+AMAT,Applied Materials Inc.
+ADI,Analog Devices Inc.
+ADP,Automatic Data Processing Inc.
+GILD,Gilead Sciences Inc.
+LRCX,Lam Research Corporation
+MDLZ,Mondelez International Inc.
+MELI,MercadoLibre Inc.
+MU,Micron Technology Inc.
+PDD,PDD Holdings Inc.
+REGN,Regeneron Pharmaceuticals Inc.
+SBUX,Starbucks Corporation
+SNPS,Synopsys Inc.
+KLAC,KLA Corporation
+CRWD,CrowdStrike Holdings Inc.
+PLTR,Palantir Technologies Inc.
+ARM,Arm Holdings plc (ADR)
+ABNB,Airbnb Inc.
+WDAY,Workday Inc.
+MAR,Marriott International Inc.
+CTAS,Cintas Corporation
+ORLY,O'Reilly Automotive Inc.
+PAYX,Paychex Inc.
+PCAR,PACCAR Inc.
